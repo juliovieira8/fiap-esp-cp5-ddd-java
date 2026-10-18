@@ -1,28 +1,32 @@
 package br.com.fiap.bank.mesa.controller;
 
-import br.com.fiap.bank.mesa.client.PlataformaCreditoFeignClient;
+import br.com.fiap.bank.mesa.client.PlataformaCreditoClient;
 import br.com.fiap.bank.mesa.dto.AprovarSolicitacaoRequestDTO;
 import br.com.fiap.bank.mesa.dto.BuscarSolicitacaoRequestDTO;
 import br.com.fiap.bank.mesa.dto.ReprovarSolicitacaoRequestDTO;
 import br.com.fiap.bank.mesa.dto.SolicitacaoCreditoDTO;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Controller
 public class MesaOperacoesController {
 
-    private final PlataformaCreditoFeignClient plataformaClient;
+    private final PlataformaCreditoClient plataformaClient;
 
-    public MesaOperacoesController(PlataformaCreditoFeignClient plataformaClient) {
+    public MesaOperacoesController(PlataformaCreditoClient plataformaClient) {
         this.plataformaClient = plataformaClient;
     }
 
@@ -34,7 +38,7 @@ public class MesaOperacoesController {
         try {
             solicitacoes = plataformaClient.listarTodasSolicitacoes();
         } catch (Exception e) {
-            System.err.println("[MESA DE OPERACOES] Plataforma de Credito indisponivel via Feign Client: " + e.getMessage());
+            System.err.println("[MESA DE OPERACOES] Plataforma de Credito indisponivel: " + e.getMessage());
             solicitacoes = new ArrayList<>();
             model.addAttribute("warning", "Aviso: Nao foi possivel conectar a Plataforma de Credito. Exibindo modo offline.");
         }
@@ -79,29 +83,49 @@ public class MesaOperacoesController {
             return "analise";
         } catch (Exception e) {
             System.err.println("[MESA DE OPERACOES] Erro ao buscar solicitacao #" + id + ": " + e.getMessage());
-            return "redirect:/dashboard?error=Erro+ao+carregar+solicitacao+" + id;
+            return "redirect:/dashboard?error=Erro+ao+carregar+a+solicitacao+" + id;
         }
     }
 
     @PostMapping("/aprovar")
     public String aprovar(@RequestParam("solicitacaoId") Long solicitacaoId,
-                          @RequestParam(value = "parecerOperador", required = false) String parecerOperador) {
+                          @RequestParam(value = "parecerOperador", required = false) String parecerOperador,
+                          RedirectAttributes redirectAttributes) {
         try {
             plataformaClient.aprovarSolicitacao(new AprovarSolicitacaoRequestDTO(solicitacaoId, parecerOperador));
-            return "redirect:/dashboard?success=Solicitacao+" + solicitacaoId + "+APROVADA+com+sucesso!";
+            redirectAttributes.addAttribute("success", "Solicitação " + solicitacaoId + " APROVADA com sucesso!");
         } catch (Exception e) {
-            return "redirect:/dashboard?error=Erro+ao+aprovar+solicitacao:+" + e.getMessage();
+            redirectAttributes.addAttribute("error",
+                    "Erro ao aprovar solicitação " + solicitacaoId + ": " + extrairMensagem(e));
         }
+        return "redirect:/dashboard";
     }
 
     @PostMapping("/reprovar")
     public String reprovar(@RequestParam("solicitacaoId") Long solicitacaoId,
-                           @RequestParam(value = "motivoReprovacao", required = false) String motivoReprovacao) {
+                           @RequestParam(value = "motivoReprovacao", required = false) String motivoReprovacao,
+                           RedirectAttributes redirectAttributes) {
         try {
             plataformaClient.reprovarSolicitacao(new ReprovarSolicitacaoRequestDTO(solicitacaoId, motivoReprovacao));
-            return "redirect:/dashboard?success=Solicitacao+" + solicitacaoId + "+REPROVADA+com+sucesso!";
+            redirectAttributes.addAttribute("success", "Solicitação " + solicitacaoId + " REPROVADA com sucesso!");
         } catch (Exception e) {
-            return "redirect:/dashboard?error=Erro+ao+reprovar+solicitacao:+" + e.getMessage();
+            redirectAttributes.addAttribute("error",
+                    "Erro ao reprovar solicitação " + solicitacaoId + ": " + extrairMensagem(e));
         }
+        return "redirect:/dashboard";
+    }
+
+    private static final Pattern DETALHE_PROBLEM_JSON = Pattern.compile("\"detail\"\\s*:\\s*\"([^\"]*)\"");
+
+    /** Extrai o campo "detail" do corpo application/problem+json devolvido pela Plataforma (se houver). */
+    private static String extrairMensagem(Exception e) {
+        if (e instanceof RestClientResponseException resposta) {
+            Matcher matcher = DETALHE_PROBLEM_JSON.matcher(resposta.getResponseBodyAsString());
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+            return "a Plataforma de Crédito respondeu com HTTP " + resposta.getStatusCode().value() + ".";
+        }
+        return "Plataforma de Crédito indisponível.";
     }
 }

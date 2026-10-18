@@ -1,103 +1,122 @@
 # FIAP Bank - Core Bancário 🏦
 
-Microsserviço de **Core Bancário** responsável pela gestão central de clientes e contas correntes/poupança do FIAP Bank. O projeto segue os princípios de **Domain-Driven Design (DDD)** com segregação estrita em arquitetura multi-módulo Maven.
+Microsserviço de **Core Bancário** (porta **8080**) responsável pela gestão central de clientes e contas do FIAP Bank. Construído do zero com **Domain-Driven Design** e **Maven multi-módulo**, expondo uma API **RESTful** (`/api/v1`).
 
----
+## 🛠️ Tecnologias
 
-## 🛠️ Tecnologias Utilizadas
+Java 21 · Spring Boot 4.1.1 · Spring Web MVC · Spring Data JPA · Jakarta Bean Validation · H2 (em memória) · Lombok · Maven multi-módulo · maven-enforcer-plugin · ArchUnit
 
-- **Java 21**
-- **Spring Boot 4.1+**
-- **Spring Data JPA**
-- **H2 Database** (em memória)
-- **Maven** (projeto multi-módulo)
+## 🧱 Arquitetura (4 submódulos físicos)
 
----
-
-## 📋 Pré-requisitos
-
-- **Java JDK 21** instalado e configurado nas variáveis de ambiente.
-- **Apache Maven 3.9+** instalado.
-
----
-
-## 🚀 Como Executar a Aplicação
-
-### 1. Compilar os módulos Maven
-
-Na raiz do diretório `fiap-bank-core-bancario`:
-
-```bash
-mvn clean install
+```
+fiap-bank-core-bancario            (pom agregador, packaging pom)
+├── ...-domain                     Entidades, Value Objects e interfaces de Repositório (Java puro + Lombok)
+├── ...-infrastructure             Ports & Adapters: entidades JPA, Spring Data JPA, adapters, carga inicial
+├── ...-application                DTOs (Java Records + Bean Validation), serviços (casos de uso), exceções
+└── ...-presentation               @SpringBootApplication, controllers RESTful, GlobalExceptionHandler
 ```
 
-### 2. Iniciar a aplicação
+Hierarquia de dependências (imposta em tempo de build):
 
-Você pode iniciar o serviço diretamente da raiz do módulo:
+`presentation -> application -> infrastructure -> domain` (e `application -> domain`).
+
+| Regra | Como é garantida |
+| :--- | :--- |
+| `domain` totalmente isolado (sem Spring Web, Spring Data JPA, `@Entity`, `@Table`, `@Column`, `@Id`) | `maven-enforcer-plugin` (`bannedDependencies`, busca transitiva) no `pom.xml` do `domain` |
+| `infrastructure` só enxerga `domain`; `application` não enxerga `presentation` | `maven-enforcer-plugin` nos respectivos `pom.xml` |
+| `presentation` **não** declara dependência direta de `domain`/`infrastructure` | `maven-enforcer-plugin` (`searchTransitive=false`) → o build falha imediatamente |
+| `presentation` não referencia classes de `domain`/`infrastructure` no código | Teste de arquitetura `ArquiteturaEmCamadasTest` (ArchUnit) |
+
+> Para testar a proteção: adicione `fiap-bank-core-bancario-domain` como dependência do `presentation` e rode `mvn validate` — o build deve falhar com *"Violacao de hierarquia"*.
+
+**Modelo de domínio** (conforme o diagrama de classes do enunciado): `Cliente`, `ContaBancaria`, VOs imutáveis `Cpf`, `Email` e `Saldo` (`adicionar`/`subtrair`), enums `StatusConta` (`ATIVA`, `BLOQUEADA`, `ENCERRADA`) e `TipoConta` (`CORRENTE`, `POUPANCA`, `SALARIO`). Um cliente possui no máximo uma conta. A conta usa bloqueio otimista (`@Version`) para que movimentações concorrentes não sobrescrevam o saldo.
+
+## 🚀 Como executar
+
+Pré-requisitos: **JDK 21** e **Maven 3.9+**.
 
 ```bash
-mvn -pl fiap-bank-core-bancario-presentation spring-boot:run
-```
+cd fiap-bank-core-bancario
+mvn clean install                       # compila, roda os testes e valida as regras do enforcer
 
-Ou navegando até o módulo de apresentação:
-
-```bash
+# opção 1: via Maven
 cd fiap-bank-core-bancario-presentation
 mvn spring-boot:run
-```
 
-### 3. Executar via arquivo JAR
-
-Após o empacotamento com `mvn clean package`:
-
-```bash
+# opção 2: via JAR executável
 java -jar fiap-bank-core-bancario-presentation/target/fiap-bank-core-bancario-presentation-1.0.0-SNAPSHOT.jar
 ```
 
-A aplicação estará acessível em: **`http://localhost:8080`**
+A API sobe em **http://localhost:8080** (as outras três aplicações do ecossistema usam as portas 8081, 8082 e 4200, portanto os quatro projetos rodam simultaneamente).
 
----
+## 📌 Carga inicial
 
-## 🗄️ Console do Banco de Dados H2
+| Cliente | CPF | Agência | Conta | Saldo |
+| :--- | :--- | :---: | :---: | ---: |
+| Ana Silva | `12345678900` | `0001` | `12345-6` | R$ 12.500,00 |
+| Carlos Eduardo Oliveira | `98765432100` | `0001` | `78901-2` | R$ 45.800,50 |
+| Mariana Souza | `55544433399` | `0001` | `34567-8` | R$ 3.200,00 |
 
-O banco de dados H2 em memória pode ser acessado pelo navegador:
+## 🌐 API RESTful (`/api/v1`)
 
-- **URL:** `http://localhost:8080/h2-console`
-- **JDBC URL:** `jdbc:h2:mem:corebancariodb`
-- **User Name:** `sa`
-- **Password:** *(deixe em branco)*
-
----
-
-## 📌 Dados Iniciais (Carga Automática)
-
-Ao subir o serviço, os seguintes dados são carregados automaticamente via `DataInitializer`:
-
-- **Cliente 1:** Ana Silva | CPF: `12345678900` | Agência: `0001` | Conta: `12345-6` | Saldo: `R$ 12.500,00`
-- **Cliente 2:** Carlos Eduardo Oliveira | CPF: `98765432100` | Agência: `0001` | Conta: `78901-2` | Saldo: `R$ 45.800,50`
-
----
-
-## 🌐 Endpoints RESTful Principais
+Recursos = substantivos no plural; a intenção está no verbo HTTP. Veja a especificação completa na seção 9/10 do enunciado.
 
 ### Clientes (`/api/v1/clientes`)
 
-| Método | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/clientes` | Lista todos os clientes cadastrados |
-| `GET` | `/api/v1/clientes/{id}` | Busca cliente por UUID |
-| `GET` | `/api/v1/clientes/cpf/{cpf}` | Busca cliente por CPF |
-| `POST` | `/api/v1/clientes` | Cadastra um novo cliente |
-| `PUT` | `/api/v1/clientes/{id}` | Atualiza dados do cliente por UUID |
-| `DELETE` | `/api/v1/clientes/{id}` | Remove um cliente por UUID |
+| Verbo | URI | Sucesso | Erros |
+| :--- | :--- | :---: | :---: |
+| `GET` | `/api/v1/clientes` | 200 | — |
+| `GET` | `/api/v1/clientes/{id}` | 200 | 400, 404 |
+| `GET` | `/api/v1/clientes/cpf/{cpf}` | 200 | 400, 404 |
+| `POST` | `/api/v1/clientes` | 201 + `Location` | 400, 409 |
+| `PUT` | `/api/v1/clientes/{id}` | 200 | 400, 404 |
+| `DELETE` | `/api/v1/clientes/{id}` | 204 | 400, 404 |
 
-### Contas Bancárias (`/api/v1/contas`)
+### Contas (`/api/v1/contas`)
 
-| Método | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/contas` | Lista todas as contas bancárias |
-| `GET` | `/api/v1/contas/{numeroConta}` | Busca detalhes de uma conta por número |
-| `GET` | `/api/v1/contas/cliente/{cpf}` | Busca conta bancária associada a um CPF |
-| `POST` | `/api/v1/contas` | Abre uma nova conta bancária para um cliente |
-| `PUT` | `/api/v1/contas/{numeroConta}/saldo` | Atualiza o saldo da conta (depósito ou saque) |
-| `DELETE` | `/api/v1/contas/{numeroConta}` | Encerra uma conta bancária |
+| Verbo | URI | Sucesso | Erros |
+| :--- | :--- | :---: | :---: |
+| `GET` | `/api/v1/contas` | 200 | — |
+| `GET` | `/api/v1/contas/{numeroConta}` | 200 | 400, 404 |
+| `GET` | `/api/v1/contas/cliente/{cpf}` | 200 | 400, 404 |
+| `POST` | `/api/v1/contas` | 201 + `Location` | 400, 409 |
+| `PUT` | `/api/v1/contas/{numeroConta}/saldo` | 200 | 400, 404, 409 |
+| `DELETE` | `/api/v1/contas/{numeroConta}` | 204 (encerramento lógico, idempotente) | 400, 404 |
+
+Decisões de projeto: listagens vazias retornam `200 []` (e não 404); `POST /contas` com CPF de cliente inexistente retorna `400` (referência inválida no payload, conforme a matriz do enunciado); `409` indica CPF duplicado, cliente que já possui conta, saldo insuficiente, conta não ativa ou conflito de concorrência; `DELETE /clientes/{id}` remove também a conta vinculada.
+
+### Validações (Jakarta Bean Validation nos DTOs, `@Valid` nos controllers)
+
+- `CriarClienteRequest`: `cpf` (11 dígitos ou `XXX.XXX.XXX-XX`), `nome` (3–150), `email` (válido), `dataNascimento` (passado), `rendaMensal` (≥ 0).
+- `CriarContaRequest`: `cpfCliente`, `agencia` (opcional, 4 dígitos, padrão `0001`), `tipoConta`, `saldoInicial` (≥ 0).
+- `AtualizarSaldoRequest`: `operacao` (`DEPOSITO`/`SAQUE`, *case-insensitive*), `valor` (> 0).
+
+### Erros padronizados (`GlobalExceptionHandler`, `@RestControllerAdvice`)
+
+Todas as falhas retornam `application/problem+json` (RFC 9457), por exemplo:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Requisição inválida",
+  "status": 400,
+  "detail": "Um ou mais campos da requisição são inválidos.",
+  "erros": [{ "campo": "cpf", "mensagem": "O CPF deve conter 11 dígitos numéricos ou o formato XXX.XXX.XXX-XX." }]
+}
+```
+
+### Exemplos
+
+```bash
+curl -s http://localhost:8080/api/v1/contas/cliente/12345678900
+curl -s -X POST http://localhost:8080/api/v1/clientes -H 'Content-Type: application/json' \
+  -d '{"cpf":"111.222.333-44","nome":"Maria Souza","email":"maria@email.com","dataNascimento":"1995-05-10","rendaMensal":5000.00}'
+curl -s -X POST http://localhost:8080/api/v1/contas -H 'Content-Type: application/json' \
+  -d '{"cpfCliente":"11122233344","tipoConta":"CORRENTE","saldoInicial":100.00}'
+curl -s -X PUT http://localhost:8080/api/v1/contas/12345-6/saldo -H 'Content-Type: application/json' \
+  -d '{"operacao":"DEPOSITO","valor":250.00}'
+```
+
+## 🧪 Testes
+
+`mvn test` executa testes unitários do domínio (VOs, regras de conta e cliente), do serviço de contas (Mockito) e o teste de arquitetura (ArchUnit).

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>br.com.fiap.bank</groupId>
+        <artifactId>fiap-bank-plataforma-credito</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fiap-bank-plataforma-credito-domain</artifactId>
+    <name>FIAP Bank - Plataforma de Credito :: domain</name>
+    <description>Dominio puro: Entidades, Value Objects e interfaces de Repositorio (sem frameworks)</description>
+
+    <dependencies>
+        <!-- Lombok apenas em tempo de compilacao (nao e dependencia de runtime) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- domain permanece estritamente puro: sem Spring, JPA/Hibernate ou camadas superiores -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-isolamento-domain</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <searchTransitive>true</searchTransitive>
+                                    <message>Violacao DDD: o modulo domain deve permanecer puro (sem Spring, JPA/Hibernate ou modulos de camadas superiores).</message>
+                                    <excludes>
+                                        <exclude>org.springframework:*</exclude>
+                                        <exclude>org.springframework.*:*</exclude>
+                                        <exclude>jakarta.persistence:*</exclude>
+                                        <exclude>org.hibernate:*</exclude>
+                                        <exclude>org.hibernate.*:*</exclude>
+                                        <exclude>com.h2database:*</exclude>
+                                        <exclude>br.com.fiap.bank:fiap-bank-plataforma-credito-infrastructure</exclude>
+                                        <exclude>br.com.fiap.bank:fiap-bank-plataforma-credito-application</exclude>
+                                        <exclude>br.com.fiap.bank:fiap-bank-plataforma-credito-presentation</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

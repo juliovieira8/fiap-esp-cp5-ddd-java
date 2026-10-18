@@ -73,7 +73,7 @@ A URL da API da **Plataforma de Crédito** é configurada em:
   - Submissão da proposta para análise na esteira da Plataforma de Crédito via chamada HTTP POST.
 - **Histórico de Solicitações:** Consulta em tempo real de todas as propostas vinculadas ao CPF do cliente, com badges de status (*Aprovado, Em Análise, Reprovado*) e pareceres.
 - **Extrato Bancário:** Visualização dos lançamentos e movimentações de crédito/débito.
-- **Consulta ao Core:** Visualização das informações retornadas diretamente do Core Bancário via integração Feign.
+- **Consulta ao Core:** Visualização das informações retornadas diretamente do Core Bancário via integração HTTP da Plataforma de Crédito.
 
 ---
 
